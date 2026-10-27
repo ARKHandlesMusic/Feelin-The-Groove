@@ -1,0 +1,14 @@
+ffconcat version 1.0
+file '/home/aarav/Downloads/untitled/public/renders/plates/plate_intro_verse1.png'
+duration 25.24
+file '/home/aarav/Downloads/untitled/public/renders/plates/plate_chorus_city.png'
+duration 31.63
+file '/home/aarav/Downloads/untitled/public/renders/plates/plate_verse2_workshop.png'
+duration 23.39
+file '/home/aarav/Downloads/untitled/public/renders/plates/plate_chorus_city.png'
+duration 48.35
+file '/home/aarav/Downloads/untitled/public/renders/plates/plate_chorus_city.png'
+duration 26.62
+file '/home/aarav/Downloads/untitled/public/renders/plates/plate_outro_credits.png'
+duration 16.27
+file '/home/aarav/Downloads/untitled/public/renders/plates/plate_outro_credits.png'

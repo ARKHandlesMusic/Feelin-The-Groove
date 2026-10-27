@@ -1,0 +1,15 @@
+[Script Info]
+Title: Find Its Groove - Official 4K 60fps Anime Music Video
+ScriptType: v4.00+
+PlayResX: 3840
+PlayResY: 2160
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: EndCredits,DejaVu Sans,56,&H003EB2FF,&H00E0F4FF,&H0022080D,&HAA180C06,-1,0,0,0,100,100,1.2,0,1,7,4,2,120,120,80,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 4,0:02:37.50,0:02:51.50,EndCredits,,0,0,0,,{\fad(400,300)}Directed by : ARK Handles Music (Aarav Kharade)   |   Lyrics: Aarav Kharade\NVocals: SUNO v6 mini   |   Animation: Gemini Argon 4 and Aarav Kharade

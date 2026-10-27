@@ -1,0 +1,6 @@
+{
+  "name": "Find Its Groove — Omniframe Music Video Engine",
+  "description": "Official 4K 60fps Anime Music Video for 'Find Its Groove' — Directed by ARK Handles Music (Aarav Kharade), Lyrics by Aarav Kharade, Vocals by SUNO v6 mini, Animation by Gemini Argon 4 and Aarav Kharade. Inspired by asking SUNO how it feels to generate music.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
