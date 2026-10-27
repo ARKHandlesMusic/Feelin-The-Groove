@@ -97,9 +97,9 @@ export default function OmniframeStageCanvas({
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
-    // 4K UHD Supersampling on hardware GPU, 1x on Software GL
+    // Cap pixel ratio to 1.5 max on GPU (1.0 on Software GL) so 4K rendering never spikes 12GB VRAM
     renderer.setPixelRatio(
-      isSoftwareGl ? 1 : Math.min((window.devicePixelRatio || 1) * 1.5, 2.5)
+      isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 1.5)
     );
     renderer.setSize(width, height);
     renderer.shadowMap.enabled = !isSoftwareGl;
