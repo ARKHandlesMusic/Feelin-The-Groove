@@ -370,31 +370,32 @@ export default function OmniframeStageCanvas({
         spark.root.visible = false;
       } else {
         spark.root.visible = true;
-        let sparkX = -1.45;
-        let sparkY = sparkBounce * 0.38;
-        let sparkZ = 0.4;
-        let sparkRotY = 0.25;
+        let sparkX = -1.45 + Math.sin(t * Math.PI * 2) * 0.32;
+        let sparkY =
+          sparkBounce * 0.42 + Math.abs(Math.sin(t * Math.PI * 4)) * 0.18;
+        let sparkZ = 0.4 + Math.cos(t * Math.PI * 2) * 0.16;
+        let sparkRotY = 0.25 + Math.sin(t * Math.PI * 2) * 0.42;
 
         if (shot.id === 'shot_02_v1_crooked_rhyme') {
           const enterP = Math.min(1, (t - 2.75) / 1.8);
           sparkX = -5.0 + enterP * 3.5;
         } else if (shot.id === 'shot_20_v2_tower_bridge') {
           // Riding the stacked note tower cleanly at x = -2.4
-          sparkX = -2.4;
-          sparkY = 1.72 + sparkBounce * 0.22;
+          sparkX = -2.4 + Math.sin(t * Math.PI * 2) * 0.15;
+          sparkY = 1.72 + sparkBounce * 0.28;
         } else if (shot.id === 'shot_24_pc2_staircase_riser') {
           const climbP = Math.min(1, (t - 74.39) / 5.0);
           sparkX = -0.6;
-          sparkY = climbP * 1.8 + sparkBounce * 0.2;
+          sparkY = climbP * 1.8 + sparkBounce * 0.25;
           sparkZ = 1.0 - climbP * 2.5;
         } else if (shot.id === 'shot_33_b2_mirror_dance') {
           // Role swap: Spark does Beat's clipped off-beat moves!
-          sparkY = metrics.snapProgress * 0.25;
+          sparkY = metrics.snapProgress * 0.32;
           sparkRotY = (metrics.beatIndex % 2 === 0 ? -0.35 : 0.35) * metrics.snapProgress;
         } else if (shot.specialOverlay === 'fourth_wall') {
-          sparkX = -1.2;
+          sparkX = -1.2 + Math.sin(t * Math.PI * 2) * 0.18;
           sparkZ = 1.3;
-          sparkRotY = 0; // Pointing straight at viewer
+          sparkRotY = Math.sin(t * Math.PI * 2) * 0.22; // Pointing at viewer with groove
         }
 
         spark.root.position.set(sparkX, sparkY, sparkZ);
@@ -949,9 +950,13 @@ export default function OmniframeStageCanvas({
         controls.update();
       } else {
         if (mode === 'director') {
-          const orbitDriftX = Math.sin(t * 0.65) * 0.32;
-          const orbitDriftY = Math.cos(t * 0.55) * 0.12;
-          const chorusPunchZ = isChorusOrBreak ? -metrics.snapProgress * 0.28 : 0;
+          const orbitDriftX =
+            Math.sin(t * Math.PI * 2) * 0.72 + Math.sin(t * 0.65) * 0.28;
+          const orbitDriftY =
+            Math.cos(t * Math.PI * 2) * 0.24 + Math.cos(t * 0.55) * 0.1;
+          const chorusPunchZ =
+            Math.sin(t * Math.PI * 4) * 0.35 +
+            (isChorusOrBreak ? -metrics.snapProgress * 0.28 : 0);
 
           _targetCamPos.set(
             shot.cameraPos[0] + orbitDriftX,
@@ -959,8 +964,8 @@ export default function OmniframeStageCanvas({
             shot.cameraPos[2] + chorusPunchZ
           );
           _targetLookAt.set(
-            shot.cameraTarget[0] + orbitDriftX * 0.25,
-            shot.cameraTarget[1],
+            shot.cameraTarget[0] + orbitDriftX * 0.3,
+            shot.cameraTarget[1] + orbitDriftY * 0.2,
             shot.cameraTarget[2]
           );
 
@@ -1053,6 +1058,7 @@ export default function OmniframeStageCanvas({
     winAny.__OMNIFRAME_RENDER_AT_FRAME__ = (frameIndex: number) => {
       const exactTimeSec = Math.max(0, frameIndex) / 60;
       currentTimeRef.current = exactTimeSec;
+      lastEvaluatedTime = -999; // Ensure 100% deterministic full-amplitude evaluation per frame
       evaluateSceneAtTime(exactTimeSec, 1 / 60);
       renderer.render(scene, camera);
       return renderer.domElement;

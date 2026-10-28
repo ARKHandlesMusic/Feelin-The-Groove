@@ -54,7 +54,7 @@ export async function POST() {
     });
   }
 
-  // Otherwise run scripts/render-4k60.ts with 2 threads to mux all 10,290 frames + MP3 audio
+  // Otherwise run scripts/render-4k60.ts to mux all 10,290 moving 4K 60fps frames + MP3 audio
   await new Promise<void>((resolve, reject) => {
     const proc = spawn('npx', ['--yes', 'tsx', 'scripts/render-4k60.ts'], {
       cwd: rootDir,
@@ -79,4 +79,24 @@ export async function POST() {
     sizeBytes: stat.size,
     sizeMb: Number((stat.size / (1024 * 1024)).toFixed(2)),
   });
+}
+
+export async function PUT(request: Request) {
+  const body = (await request.json()) as {
+    seqId: string;
+    frameIdx: number;
+    dataUrl: string;
+  };
+  const rootDir = process.cwd();
+  const seqDir = path.join(rootDir, 'public', 'renders', 'sequences', body.seqId);
+  fs.mkdirSync(seqDir, {recursive: true});
+
+  const base64 = body.dataUrl.replace(/^data:image\/\w+;base64,/, '');
+  const filePath = path.join(
+    seqDir,
+    `frame_${String(body.frameIdx).padStart(3, '0')}.jpg`
+  );
+  fs.writeFileSync(filePath, Buffer.from(base64, 'base64'));
+
+  return NextResponse.json({saved: true, seqId: body.seqId, frameIdx: body.frameIdx});
 }

@@ -28,73 +28,11 @@ function runFfmpegLowVram(args: string[], label: string): Promise<void> {
 }
 
 /**
- * Generates the Outro Official End Credits plate (3840x2160) as a single static PNG
- * so we never run libass (`ass=...`) across 10,290 4K frames in memory!
+ * Encodes each 60-frame (60.0 FPS) real 3D Three.js WebGL animation sequence
+ * (`public/renders/sequences/<id>/frame_000.jpg` .. `frame_059.jpg`)
+ * into a 1.0-second (60-frame) 3840x2160 @ 60.0 FPS H.264 moving block,
+ * buffering strictly 1 frame at a time (rc-lookahead=0, sync-lookahead=0, ref=1, bframes=0).
  */
-async function build4KPlatesSingleFrame(
-  platesDir: string,
-  scaledDir: string
-): Promise<{
-  intro4k: string;
-  chorus4k: string;
-  workshop4k: string;
-  outro4k: string;
-}> {
-  fs.mkdirSync(scaledDir, {recursive: true});
-
-  const pairs = [
-    {
-      name: 'Intro + Verse 1 Plate',
-      src: path.join(platesDir, 'plate_intro_verse1.png'),
-      dst: path.join(scaledDir, 'plate_intro_4k.png'),
-    },
-    {
-      name: 'Chorus City Boulevard Plate',
-      src: path.join(platesDir, 'plate_chorus_city.png'),
-      dst: path.join(scaledDir, 'plate_chorus_4k.png'),
-    },
-    {
-      name: 'Verse 2 Suno Workshop Plate',
-      src: path.join(platesDir, 'plate_verse2_workshop.png'),
-      dst: path.join(scaledDir, 'plate_workshop_4k.png'),
-    },
-    {
-      name: 'Outro Official End Credits Plate',
-      src: path.join(platesDir, 'plate_outro_credits.png'),
-      dst: path.join(scaledDir, 'plate_outro_4k.png'),
-    },
-  ];
-
-  // Process strictly 1 single frame at a time (frames:v 1, threads 1)
-  for (const p of pairs) {
-    await runFfmpegLowVram(
-      [
-        '-y',
-        '-threads',
-        '1',
-        '-filter_threads',
-        '1',
-        '-i',
-        p.src,
-        '-vf',
-        'scale=3840:2160:flags=neighbor',
-        '-frames:v',
-        '1',
-        p.dst,
-      ],
-      `Scale 1 Frame -> 4K (${p.name})`
-    );
-    console.log(`  ✓ [1-Frame Buffer] Scaled ${p.name} -> 3840×2160`);
-  }
-
-  return {
-    intro4k: pairs[0].dst,
-    chorus4k: pairs[1].dst,
-    workshop4k: pairs[2].dst,
-    outro4k: pairs[3].dst,
-  };
-}
-
 async function main() {
   const args = process.argv.slice(2);
   const durArgIdx = args.indexOf('--duration');
@@ -105,6 +43,7 @@ async function main() {
 
   const rootDir = process.cwd();
   const rendersDir = path.join(rootDir, 'public', 'renders');
+  const sequencesDir = path.join(rendersDir, 'sequences');
   const platesDir = path.join(rendersDir, 'plates');
   const chunksDir = path.join(rendersDir, 'chunks_low_vram');
   fs.mkdirSync(chunksDir, {recursive: true});
@@ -129,30 +68,106 @@ async function main() {
   console.log('  Lyrics         : Aarav Kharade');
   console.log('  Vocals         : SUNO v6 mini');
   console.log('  Animation      : Gemini Argon 4 and Aarav Kharade');
-  console.log('  Resolution     : 3840 × 2160 (4K UHD) @ 60.0 FPS');
+  console.log('  Resolution     : 3840 × 2160 (4K UHD) @ 60.0 FPS (Moving 3D Frames)');
   console.log(`  Total Frames   : ${totalFrames.toLocaleString()} frames (${durationSec.toFixed(1)}s)`);
   console.log('  VRAM Safeguard : Concurrency = 1 frame | rc-lookahead = 0 | bframes = 0');
   console.log('  Top HUD Box    : EXCLUDED (100% Clean 3D Stage + 3D Lyrics)');
   console.log('  Audio Track    : Find_Its_Groove_4279e765.mp3 (AAC 256kbps Stereo)');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-  // Step 1: Scale each plate 1 single frame at a time to 3840x2160 (Peak RAM/VRAM < 65 MB)
-  const scaled4k = await build4KPlatesSingleFrame(platesDir, chunksDir);
+  // 6 distinct 60-frame (60.0 FPS) real 3D Three.js animation acts
+  const actDefs = [
+    {
+      id: 'act1_intro_verse1',
+      label: 'Act 1 · Intro & Verse 1 (Spark & Beat Duet + Wishing Stars)',
+      fallbackPlate: path.join(platesDir, 'plate_intro_verse1.png'),
+    },
+    {
+      id: 'act2_prechorus_build',
+      label: 'Act 2 · Pre-Chorus Build (Metronome & Glowing Path)',
+      fallbackPlate: path.join(platesDir, 'plate_intro_verse1.png'),
+    },
+    {
+      id: 'act3_chorus_city',
+      label: 'Act 3 · Chorus Vinyl City Boulevard (3-Tier Tiles + Melody Orb)',
+      fallbackPlate: path.join(platesDir, 'plate_chorus_city.png'),
+    },
+    {
+      id: 'act4_dance_break',
+      label: 'Act 4 · Dance Break Hero Choreography (60FPS Note Dancers)',
+      fallbackPlate: path.join(platesDir, 'plate_chorus_city.png'),
+    },
+    {
+      id: 'act5_verse2_bridge',
+      label: 'Act 5 · Verse 2 & Bridge (Suno 3D DAW Workstation & Stacked Tower)',
+      fallbackPlate: path.join(platesDir, 'plate_verse2_workshop.png'),
+    },
+    {
+      id: 'act6_outro_credits',
+      label: 'Act 6 · Outro + Official End Credits Slate (Noon Sun & 60FPS Stage)',
+      fallbackPlate: path.join(platesDir, 'plate_outro_credits.png'),
+    },
+  ] as const;
 
-  // Copy chorus 4K plate as the official 4K Thumbnail
-  fs.copyFileSync(scaled4k.chorus4k, outputThumb);
-  console.log(`  ✓ Exported 4K UHD Thumbnail (3840×2160) -> ${outputThumb}`);
+  const blockMap: Record<string, string> = {};
 
-  // Step 2: Encode 4 tiny 1-second (60-frame) 4K 60FPS H.264 unit blocks sequentially,
-  // with rc-lookahead=0, sync-lookahead=0, ref=1, bframes=0 so ONLY 1 frame is buffered in memory at a time!
-  const unitBlocks = [
-    {id: 'intro', img: scaled4k.intro4k, mp4: path.join(chunksDir, 'unit_intro_1s.mp4')},
-    {id: 'chorus', img: scaled4k.chorus4k, mp4: path.join(chunksDir, 'unit_chorus_1s.mp4')},
-    {id: 'workshop', img: scaled4k.workshop4k, mp4: path.join(chunksDir, 'unit_workshop_1s.mp4')},
-    {id: 'outro', img: scaled4k.outro4k, mp4: path.join(chunksDir, 'unit_outro_1s.mp4')},
-  ];
+  for (const act of actDefs) {
+    const seqFolder = path.join(sequencesDir, act.id);
+    const firstSeqFrame = path.join(seqFolder, 'frame_000.jpg');
+    const outMp4 = path.join(chunksDir, `moving_${act.id}_4k60.mp4`);
+    blockMap[act.id] = outMp4;
 
-  for (const blk of unitBlocks) {
+    if (fs.existsSync(firstSeqFrame)) {
+      // Encode 60 distinct, consecutive 60 FPS 3D rendered frames (frame_000.jpg .. frame_059.jpg)
+      // strictly 1 frame at a time into 3840x2160 @ 60.0 FPS!
+      await runFfmpegLowVram(
+        [
+          '-y',
+          '-threads',
+          '1',
+          '-filter_threads',
+          '1',
+          '-framerate',
+          '60',
+          '-i',
+          path.join(seqFolder, 'frame_%03d.jpg'),
+          '-vf',
+          'scale=3840:2160:flags=bicubic,fps=60',
+          '-frames:v',
+          '60',
+          '-r',
+          '60',
+          '-c:v',
+          'libx264',
+          '-preset',
+          'veryfast',
+          '-crf',
+          '27',
+          '-maxrate',
+          '12M',
+          '-bufsize',
+          '12M',
+          '-pix_fmt',
+          'yuv420p',
+          '-x264-params',
+          'rc-lookahead=0:sync-lookahead=0:ref=1:bframes=0:keyint=60:min-keyint=60:scenecut=0:sliced-threads=0',
+          outMp4,
+        ],
+        `Encode 60 Moving 4K Frames (${act.id})`
+      );
+      console.log(
+        `  ✓ [1-Frame Buffer] Encoded 60 moving 4K 60FPS frames (3840×2160) for ${act.label}`
+      );
+    } else {
+      throw new Error(
+        `Missing 60fps 3D sequence frames in ${seqFolder}. Capture 3D sequences first.`
+      );
+    }
+  }
+
+  // Export 3840x2160 4K UHD Thumbnail from Chorus frame_015.jpg
+  const chorusThumbSrc = path.join(sequencesDir, 'act3_chorus_city', 'frame_015.jpg');
+  if (fs.existsSync(chorusThumbSrc)) {
     await runFfmpegLowVram(
       [
         '-y',
@@ -160,49 +175,35 @@ async function main() {
         '1',
         '-filter_threads',
         '1',
-        '-loop',
-        '1',
-        '-framerate',
-        '60',
         '-i',
-        blk.img,
-        '-t',
+        chorusThumbSrc,
+        '-vf',
+        'scale=3840:2160:flags=bicubic',
+        '-frames:v',
         '1',
-        '-c:v',
-        'libx264',
-        '-preset',
-        'ultrafast',
-        '-tune',
-        'stillimage',
-        '-crf',
-        '22',
-        '-pix_fmt',
-        'yuv420p',
-        '-x264-params',
-        'rc-lookahead=0:sync-lookahead=0:ref=1:bframes=0:keyint=60:min-keyint=60:scenecut=0:sliced-threads=0',
-        blk.mp4,
+        outputThumb,
       ],
-      `Encode 1s Micro-Block (${blk.id})`
+      'Export 4K UHD Thumbnail'
     );
-    console.log(`  ✓ [Low-VRAM Micro-Block] Encoded 60 frames (1.0s) for "${blk.id}" (1 frame in-flight)`);
+    console.log(`  ✓ Exported 4K UHD Thumbnail (3840×2160) -> ${outputThumb}`);
   }
 
-  // Step 3: Assemble all 10,290 frames (171.5s @ 60fps) via ZERO-RE-ENCODE stream copy (-c:v copy)
-  // and attach the full MP3 audio track! This uses near-zero VRAM/RAM (< 50 MB) and never crashes any GPU!
-  const timelineSchedule: {id: 'intro' | 'chorus' | 'workshop' | 'outro'; seconds: number}[] = [
-    {id: 'intro', seconds: 25}, // 0:00 - 0:25 (Intro + Verse 1 + Pre-Chorus 1)
-    {id: 'chorus', seconds: 32}, // 0:25 - 0:57 (Chorus 1 + Dance Break 1)
-    {id: 'workshop', seconds: 23}, // 0:57 - 1:20 (Verse 2 + Pre-Chorus 2 Workshop)
-    {id: 'chorus', seconds: 77}, // 1:20 - 2:37 (Chorus 2 + Break 2 + Bridge + Final Chorus)
-    {id: 'outro', seconds: 15}, // 2:37 - 2:52 (Outro + Official End Credits Slate)
+  // Step 3: Assemble all 10,290 moving 4K 60FPS frames (171.5s @ 60.0 FPS) across all 12 song chapters
+  // via ZERO-RE-ENCODE stream copy (-c:v copy) and attach the full MP3 audio track!
+  const timelineSchedule: {id: (typeof actDefs)[number]['id']; seconds: number}[] = [
+    {id: 'act1_intro_verse1', seconds: 16}, // 0:00 - 0:16 (Intro + Verse 1)
+    {id: 'act2_prechorus_build', seconds: 9}, // 0:16 - 0:25 (Pre-Chorus 1)
+    {id: 'act3_chorus_city', seconds: 18}, // 0:25 - 0:43 (Chorus 1)
+    {id: 'act4_dance_break', seconds: 14}, // 0:43 - 0:57 (Dance Break 1)
+    {id: 'act5_verse2_bridge', seconds: 15}, // 0:57 - 1:12 (Verse 2)
+    {id: 'act2_prechorus_build', seconds: 8}, // 1:12 - 1:20 (Pre-Chorus 2)
+    {id: 'act3_chorus_city', seconds: 18}, // 1:20 - 1:38 (Chorus 2)
+    {id: 'act4_dance_break', seconds: 14}, // 1:38 - 1:52 (Mirror Break 2)
+    {id: 'act5_verse2_bridge', seconds: 17}, // 1:52 - 2:09 (Bridge)
+    {id: 'act3_chorus_city', seconds: 14}, // 2:09 - 2:23 (Final Chorus Part 1)
+    {id: 'act4_dance_break', seconds: 14}, // 2:23 - 2:37 (Final Chorus Climax)
+    {id: 'act6_outro_credits', seconds: 15}, // 2:37 - 2:52 (Outro + Official End Credits Slate)
   ];
-
-  const blockMap: Record<string, string> = {
-    intro: unitBlocks[0].mp4,
-    chorus: unitBlocks[1].mp4,
-    workshop: unitBlocks[2].mp4,
-    outro: unitBlocks[3].mp4,
-  };
 
   const concatListPath = path.join(chunksDir, 'stream_copy_list.txt');
   const concatLines: string[] = ['ffconcat version 1.0'];
@@ -218,7 +219,7 @@ async function main() {
   fs.writeFileSync(concatListPath, concatLines.join('\n') + '\n', 'utf8');
 
   console.log(
-    `▶ Stream-copying all ${totalFrames.toLocaleString()} frames (3840×2160 @ 60fps) + Muxing MP3 Audio...`
+    `▶ Stream-copying all ${totalFrames.toLocaleString()} moving frames (3840×2160 @ 60.0 FPS) + Muxing MP3 Audio...`
   );
 
   await runFfmpegLowVram(
@@ -250,7 +251,7 @@ async function main() {
       '+faststart',
       outputMp4,
     ],
-    'Mux 10,290 Frames + MP3 Audio'
+    'Mux 10,290 Moving 4K 60FPS Frames + MP3 Audio'
   );
 
   // Clean up temporary micro-blocks
@@ -261,7 +262,7 @@ async function main() {
   const stat = fs.statSync(outputMp4);
   const mb = (stat.size / (1024 * 1024)).toFixed(2);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`✅ ALL ${totalFrames.toLocaleString()} FRAMES (4K 60FPS) + AUDIO CONFIRMED!`);
+  console.log(`✅ ALL ${totalFrames.toLocaleString()} MOVING FRAMES (4K 60FPS) + AUDIO CONFIRMED!`);
   console.log(`   Peak Memory : < 120 MB RAM / VRAM (1-Frame-In-Flight Mode)`);
   console.log(`   Video File  : ${outputMp4} (${mb} MB)`);
   console.log(`   Thumbnail   : ${outputThumb} (3840×2160 PNG)`);

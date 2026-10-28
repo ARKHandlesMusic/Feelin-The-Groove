@@ -46,7 +46,10 @@ export default function Render4K60Engine({
   } | null>(null);
   const [minimized, setMinimized] = useState(false);
 
+  const [showVideoPreview, setShowVideoPreview] = useState(false);
+
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const videoTrackRef = useRef<(MediaStreamTrack & {requestFrame?: () => void}) | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number>(0);
   const frameCursorRef = useRef<number>(0);
@@ -199,7 +202,7 @@ export default function Render4K60Engine({
       const data = await res.json();
       if (data.ready) {
         setMasterMp4Info({
-          url: data.url,
+          url: `${data.url}?v=${Date.now()}`,
           sizeMb: data.sizeMb,
           audioSpec: data.audioSpec,
         });
@@ -214,11 +217,11 @@ export default function Render4K60Engine({
 
   /**
    * Starts the deterministic Frame-by-Frame Stepper:
-   * Renders Frame 0 -> moves to Frame 1 -> ... -> Frame 10,290,
+   * Renders Frame 0 -> moves to Frame 1 -> ... -> Frame 10,290 (1 frame at a time),
    * then combines all 10,290 frames + full MP3 audio into a confirmed 4K 60fps video.
    */
   const startFrameByFrameRender = useCallback(
-    (framesPerBatch: number = 15) => {
+    (framesPerBatch: number = 1) => {
       if (timerRef.current) {
         window.clearTimeout(timerRef.current);
         timerRef.current = 0;
@@ -249,6 +252,10 @@ export default function Render4K60Engine({
       // 2. Set up MediaRecorder combining 60fps 4K Canvas Video Track + Song Audio Track
       try {
         const videoStream = canvas.captureStream(60);
+        const primaryVideoTrack = videoStream.getVideoTracks()[0] as MediaStreamTrack & {
+          requestFrame?: () => void;
+        };
+        videoTrackRef.current = primaryVideoTrack || null;
         const combinedTracks: MediaStreamTrack[] = [...videoStream.getVideoTracks()];
 
         // Attach audio stream from dedicated hidden <audio> element if supported
@@ -316,7 +323,7 @@ export default function Render4K60Engine({
         // Headless fallback continues deterministic frame stepping + FFmpeg MP4 mux
       }
 
-      // 3. Deterministic Frame-by-Frame Stepper Loop (Frame 0 -> 10,289)
+      // 3. Deterministic 1-Frame-at-a-Time Stepper Loop (Frame 0 -> 10,289)
       const stepNextFrameBatch = () => {
         const c = masterCanvasRef.current;
         if (!c) return;
@@ -325,21 +332,16 @@ export default function Render4K60Engine({
         // Render exact frame onto Three.js WebGL stage and composite clean 4K frame
         renderExactFrameTo4KCanvas(c, currentF);
 
-        // Advance through batch of frames so all 10,290 frames complete smoothly
+        // Request frame push on the active MediaRecorder video track
+        try {
+          videoTrackRef.current?.requestFrame?.();
+        } catch {}
+
+        // Advance through frames (1 frame at a time in 1-by-1 mode)
         currentF = Math.min(TOTAL_FRAMES, currentF + framesPerBatch);
         frameCursorRef.current = currentF;
         setRenderedFrames(currentF);
         onStepFrame?.(Math.min(TOTAL_FRAMES - 1, currentF));
-
-        // Request frame push on canvas captureStream track if supported
-        try {
-          const videoTrack = (
-            c as HTMLCanvasElement & {captureStream?: () => MediaStream}
-          )
-            .captureStream?.()
-            ?.getVideoTracks?.()[0] as MediaStreamTrack & {requestFrame?: () => void};
-          videoTrack?.requestFrame?.();
-        } catch {}
 
         if (currentF >= TOTAL_FRAMES) {
           finalizeAndMuxAudio();
@@ -358,7 +360,7 @@ export default function Render4K60Engine({
     if (autoStartOnMount && !hasAutoStartedRef.current) {
       hasAutoStartedRef.current = true;
       const t = window.setTimeout(() => {
-        startFrameByFrameRender(30);
+        startFrameByFrameRender(1);
       }, 300);
       return () => window.clearTimeout(t);
     }
@@ -501,19 +503,41 @@ export default function Render4K60Engine({
               </div>
             )}
 
-            {/* Confirmed 4K 60FPS MP4 + Full MP3 Audio Download */}
+            {/* Confirmed 4K 60FPS MP4 + Full MP3 Audio Download & Preview */}
             {masterMp4Info && (
-              <a
-                data-testid="download-confirmed-4k60-mp4"
-                href={masterMp4Info.url}
-                download="Find-Its-Groove-4K-60FPS-Confirmed-With-Audio.mp4"
-                className="w-full py-2.5 px-3 rounded-xl bg-[#FFB23E] hover:bg-[#ffc366] text-[#120E2E] text-xs font-extrabold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-lg"
-              >
-                <Download className="w-4 h-4 shrink-0" />
-                <span>
-                  Download Confirmed 4K 60FPS MP4 + Audio ({masterMp4Info.sizeMb} MB · 10,290f)
-                </span>
-              </a>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <a
+                    data-testid="download-confirmed-4k60-mp4"
+                    href={masterMp4Info.url}
+                    download="Find-Its-Groove-4K-60FPS-Confirmed-With-Audio.mp4"
+                    className="flex-1 py-2.5 px-2.5 rounded-xl bg-[#FFB23E] hover:bg-[#ffc366] text-[#120E2E] text-xs font-extrabold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-lg"
+                  >
+                    <Download className="w-4 h-4 shrink-0" />
+                    <span>
+                      Download 4K 60FPS MP4 + Audio ({masterMp4Info.sizeMb} MB)
+                    </span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setShowVideoPreview((v) => !v)}
+                    className="py-2.5 px-2.5 rounded-xl bg-[#221A4F] hover:bg-[#2E236B] border border-[#2EC4B6]/50 text-[#2EC4B6] text-xs font-bold cursor-pointer"
+                  >
+                    {showVideoPreview ? 'Hide' : 'Preview'}
+                  </button>
+                </div>
+
+                {showVideoPreview && (
+                  <div className="rounded-xl overflow-hidden border border-[#2EC4B6]/40 bg-black">
+                    <video
+                      src={masterMp4Info.url}
+                      controls
+                      playsInline
+                      className="w-full aspect-video object-contain bg-black"
+                    />
+                  </div>
+                )}
+              </div>
             )}
 
             {downloadUrl && (
