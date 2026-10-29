@@ -4,12 +4,12 @@ import React from 'react';
 import {
   AbsoluteFill,
   Sequence,
+  Audio,
+  staticFile,
   useCurrentFrame,
   useVideoConfig,
-  REMOTION_SEQUENCES,
-  frameToSeconds,
 } from 'remotion';
-import {ThreeCanvas} from '@remotion/three';
+import {REMOTION_SEQUENCES, frameToSeconds} from '@/lib/remotion-engine';
 import OmniframeStageCanvas from '@/components/OmniframeStageCanvas';
 import VectorOverlay2D from '@/components/VectorOverlay2D';
 import {
@@ -21,25 +21,25 @@ import {
 import {CameraPresetMode, ShotSpec, getShotAtTime} from '@/lib/timeline';
 
 export interface FindItsGrooveCompositionProps {
-  currentTimeRef: React.MutableRefObject<number>;
-  audioEnergyRef: React.MutableRefObject<{bass: number; mid: number; high: number}>;
-  cameraMode: CameraPresetMode;
-  animePreset: AnimeGradePreset;
-  lyricStyleOverride: number | 'auto';
+  currentTimeRef?: React.MutableRefObject<number>;
+  audioEnergyRef?: React.MutableRefObject<{bass: number; mid: number; high: number}>;
+  cameraMode?: CameraPresetMode;
+  animePreset?: AnimeGradePreset;
+  lyricStyleOverride?: number | 'auto';
   hideLightingOverlay?: boolean;
   currentShot?: ShotSpec;
 }
 
 /**
- * Authoritative Remotion + Three.js (<ThreeCanvas />) Composition for
+ * Authoritative Remotion + Three.js Composition for
  * "Find Its Groove" (3840x2160 @ 60 FPS, 10,290 frames).
  */
 export const FindItsGrooveComposition: React.FC<FindItsGrooveCompositionProps> = ({
   currentTimeRef,
   audioEnergyRef,
-  cameraMode,
-  animePreset,
-  lyricStyleOverride,
+  cameraMode = 'director',
+  animePreset = 'cel90s',
+  lyricStyleOverride = 'auto',
   hideLightingOverlay = false,
   currentShot: propShot,
 }) => {
@@ -50,19 +50,26 @@ export const FindItsGrooveComposition: React.FC<FindItsGrooveCompositionProps> =
 
   return (
     <AbsoluteFill data-remotion-composition="FindItsGroove4K60">
+      {/* Synchronized MP3 Audio Track */}
+      <Audio src={staticFile('assets/aistudio/Find_Its_Groove_4279e765.mp3')} />
+
       {/* Layer 1: SVG Cel-Shading & Posterization Filter Definition (#anime-cel) */}
       <AnimeFilters />
 
-      {/* Layer 2: @remotion/three <ThreeCanvas> 4K 60FPS 3D Stage */}
-      <ThreeCanvas width={width} height={height}>
+      {/* Layer 2: 4K 60FPS Three.js 3D Stage */}
+      <AbsoluteFill>
         <OmniframeStageCanvas
+          frame={frame}
+          fps={fps}
+          width={width}
+          height={height}
           currentTimeRef={currentTimeRef}
           audioEnergyRef={audioEnergyRef}
           cameraMode={cameraMode}
           lyricStyleOverride={lyricStyleOverride}
           animeFilterStyle={getAnimeCanvasFilterStyle(animePreset)}
         />
-      </ThreeCanvas>
+      </AbsoluteFill>
 
       {/* Layer 3: Remotion Chapter <Sequence> Orchestration & 2D Cel Vector Storytelling */}
       {REMOTION_SEQUENCES.map((seq) => (

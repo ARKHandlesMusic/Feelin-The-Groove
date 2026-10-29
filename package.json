@@ -8,12 +8,19 @@
     "start": "next start",
     "lint": "eslint .",
     "clean": "next clean",
-    "render": "npx --yes tsx scripts/render-4k60.ts",
-    "render:quick": "npx --yes tsx scripts/render-4k60.ts --duration 15"
+    "render": "remotion render remotion/index.ts FindItsGroove4K60 public/renders/Find_Its_Groove_4K_60FPS.mp4",
+    "render:1080p": "remotion render remotion/index.ts FindItsGroove1080p60 public/renders/Find_Its_Groove_1080p_60FPS.mp4",
+    "render:quick": "remotion render remotion/index.ts FindItsGrooveQuick public/renders/Find_Its_Groove_Quick.mp4",
+    "studio": "remotion studio remotion/index.ts",
+    "preview": "remotion studio remotion/index.ts",
+    "render:legacy": "npx --yes tsx scripts/render-4k60.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
     "@hookform/resolvers": "^5.2.1",
+    "@remotion/cli": "^4.0.539",
+    "@remotion/player": "^4.0.539",
+    "@remotion/three": "^4.0.539",
     "@types/three": "^0.186.0",
     "autoprefixer": "^10.4.21",
     "class-variance-authority": "^0.7.1",
@@ -24,8 +31,10 @@
     "postcss": "^8.5.6",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
+    "remotion": "^4.0.539",
     "tailwind-merge": "^3.3.1",
-    "three": "^0.186.1"
+    "three": "^0.186.1",
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.11",

@@ -22,8 +22,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"],
-      "remotion": ["./lib/remotion-three-bridge.tsx"],
-      "@remotion/three": ["./lib/remotion-three-bridge.tsx"]
+      "remotion": ["./node_modules/remotion"],
+      "remotion/*": ["./node_modules/remotion/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

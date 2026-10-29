@@ -18,3 +18,31 @@ View your app in AI Studio: https://ai.studio/apps/d0407523-9443-4685-8ec9-078c7
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Video Rendering with Remotion
+
+This project is fully powered by official Remotion:
+
+- **Render Full 4K 60FPS Video**:
+  ```bash
+  npm run render
+  ```
+  Renders the master 4K 60FPS composition (`3840×2160`, 10,290 frames / 171.5s) with synchronized stereo audio to `public/renders/Find_Its_Groove_4K_60FPS.mp4`.
+
+- **Render 1080p 60FPS Video**:
+  ```bash
+  npm run render:1080p
+  ```
+
+- **Render Quick 5-Second Test**:
+  ```bash
+  npm run render:quick
+  ```
+
+- **Open Remotion Studio (Interactive Timeline & Composition Inspector)**:
+  ```bash
+  npm run studio
+  # or
+  npm run preview
+  ```
+

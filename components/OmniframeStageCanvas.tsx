@@ -30,10 +30,14 @@ import {
   KINETIC_STYLES_50,
 } from '@/lib/world-sceneries';
 
-interface OmniframeStageCanvasProps {
-  currentTimeRef: React.MutableRefObject<number>;
-  audioEnergyRef: React.MutableRefObject<{bass: number; mid: number; high: number}>;
-  cameraMode: CameraPresetMode;
+export interface OmniframeStageCanvasProps {
+  frame?: number;
+  fps?: number;
+  width?: number;
+  height?: number;
+  currentTimeRef?: React.MutableRefObject<number>;
+  audioEnergyRef?: React.MutableRefObject<{bass: number; mid: number; high: number}>;
+  cameraMode?: CameraPresetMode;
   lyricStyleOverride?: number | 'auto';
   animeFilterStyle?: React.CSSProperties;
 }
@@ -48,13 +52,18 @@ const _targetLookAt = new THREE.Vector3();
 const _currentLookAt = new THREE.Vector3(0, 1.2, 0);
 
 export default function OmniframeStageCanvas({
+  frame,
+  fps = 60,
+  width,
+  height,
   currentTimeRef,
   audioEnergyRef,
-  cameraMode,
+  cameraMode = 'director',
   lyricStyleOverride = 'auto',
   animeFilterStyle,
 }: OmniframeStageCanvasProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const renderFrameRef = useRef<((f: number) => void) | null>(null);
   const cameraModeRef = useRef<CameraPresetMode>(cameraMode);
   const lyricStyleOverrideRef = useRef<number | 'auto'>(lyricStyleOverride);
 
@@ -86,8 +95,8 @@ export default function OmniframeStageCanvas({
       }
     })();
 
-    const width = container.clientWidth || window.innerWidth;
-    const height = container.clientHeight || window.innerHeight;
+    const stageWidth = width ?? (container.clientWidth || window.innerWidth || 3840);
+    const stageHeight = height ?? (container.clientHeight || window.innerHeight || 2160);
 
     const renderer = new THREE.WebGLRenderer({
       antialias: !isSoftwareGl,
@@ -101,7 +110,7 @@ export default function OmniframeStageCanvas({
     renderer.setPixelRatio(
       isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 1.5)
     );
-    renderer.setSize(width, height);
+    renderer.setSize(stageWidth, stageHeight);
     renderer.shadowMap.enabled = !isSoftwareGl;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.domElement.setAttribute('data-stage-webgl', 'true');
@@ -118,7 +127,7 @@ export default function OmniframeStageCanvas({
     scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
     pmremGenerator.dispose();
 
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 120);
+    const camera = new THREE.PerspectiveCamera(45, stageWidth / stageHeight, 0.1, 120);
     camera.position.set(0, 3.2, 10.5);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -258,7 +267,7 @@ export default function OmniframeStageCanvas({
       const tParam = params.get('t');
       if (tParam) {
         const parsed = parseFloat(tParam);
-        if (!Number.isNaN(parsed)) {
+        if (!Number.isNaN(parsed) && currentTimeRef) {
           currentTimeRef.current = parsed;
         }
       }
@@ -275,7 +284,11 @@ export default function OmniframeStageCanvas({
     function evaluateSceneAtTime(t: number, dt: number) {
       const shot = getShotAtTime(t);
       const metrics = getBeatMetrics(t);
-      const energy = audioEnergyRef.current;
+      const energy = audioEnergyRef?.current ?? {
+        bass: Math.pow(Math.max(0, 1 - metrics.beatPhase), 2),
+        mid: metrics.sparkBounce * 0.8,
+        high: metrics.snapProgress * 0.7,
+      };
       const isJump = Math.abs(t - lastEvaluatedTime) > 1.2;
       lastEvaluatedTime = t;
 
@@ -1042,7 +1055,7 @@ export default function OmniframeStageCanvas({
       const dt = Math.min(0.1, Math.max(0.001, (now - lastClockTime) / 1000));
       lastClockTime = now;
 
-      evaluateSceneAtTime(currentTimeRef.current, dt);
+      evaluateSceneAtTime(currentTimeRef?.current ?? 0, dt);
       renderer.render(scene, camera);
 
       if (isSoftwareGl) {
@@ -1052,24 +1065,37 @@ export default function OmniframeStageCanvas({
       }
     }
 
+    renderFrameRef.current = (f: number) => {
+      const fpsVal = fps || 60;
+      const exactTimeSec = Math.max(0, f) / fpsVal;
+      if (currentTimeRef) currentTimeRef.current = exactTimeSec;
+      lastEvaluatedTime = -999;
+      evaluateSceneAtTime(exactTimeSec, 1 / fpsVal);
+      renderer.render(scene, camera);
+    };
+
     const winAny = window as unknown as {
       __OMNIFRAME_RENDER_AT_FRAME__?: (frameIndex: number) => HTMLCanvasElement;
     };
     winAny.__OMNIFRAME_RENDER_AT_FRAME__ = (frameIndex: number) => {
-      const exactTimeSec = Math.max(0, frameIndex) / 60;
-      currentTimeRef.current = exactTimeSec;
+      const exactTimeSec = Math.max(0, frameIndex) / (fps || 60);
+      if (currentTimeRef) currentTimeRef.current = exactTimeSec;
       lastEvaluatedTime = -999; // Ensure 100% deterministic full-amplitude evaluation per frame
-      evaluateSceneAtTime(exactTimeSec, 1 / 60);
+      evaluateSceneAtTime(exactTimeSec, 1 / (fps || 60));
       renderer.render(scene, camera);
       return renderer.domElement;
     };
 
-    tick();
+    if (frame === undefined) {
+      tick();
+    } else {
+      renderFrameRef.current(frame);
+    }
 
     const handleResize = () => {
       if (!container) return;
-      const w = container.clientWidth || window.innerWidth;
-      const h = container.clientHeight || window.innerHeight;
+      const w = width ?? (container.clientWidth || window.innerWidth || 3840);
+      const h = height ?? (container.clientHeight || window.innerHeight || 2160);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
@@ -1077,6 +1103,7 @@ export default function OmniframeStageCanvas({
     window.addEventListener('resize', handleResize);
 
     return () => {
+      renderFrameRef.current = null;
       delete winAny.__OMNIFRAME_RENDER_AT_FRAME__;
       window.removeEventListener('resize', handleResize);
       window.cancelAnimationFrame(frameId);
@@ -1084,7 +1111,13 @@ export default function OmniframeStageCanvas({
       controls.dispose();
       renderer.dispose();
     };
-  }, [currentTimeRef, audioEnergyRef]);
+  }, [currentTimeRef, audioEnergyRef, width, height, fps]);
+
+  useEffect(() => {
+    if (frame !== undefined && renderFrameRef.current) {
+      renderFrameRef.current(frame);
+    }
+  }, [frame, fps]);
 
   return (
     <div

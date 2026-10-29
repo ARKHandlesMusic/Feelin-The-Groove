@@ -5,7 +5,7 @@ import {
   REMOTION_CONFIG,
   REMOTION_SEQUENCES,
   evaluateRemotionFrameState,
-} from 'remotion';
+} from '@/lib/remotion-engine';
 
 interface RemotionSequenceBarProps {
   currentFrame: number;

@@ -19,13 +19,13 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
+import {RemotionCompositionProvider} from '@/lib/remotion-three-bridge';
 import {
-  RemotionCompositionProvider,
   REMOTION_CONFIG,
   frameToSeconds,
   secondsToFrame,
   getSequenceAtFrame,
-} from 'remotion';
+} from '@/lib/remotion-engine';
 import RemotionRoot from '@/remotion/Root';
 import RemotionSequenceBar from '@/components/RemotionSequenceBar';
 import ReleaseKitModal from '@/components/ReleaseKitModal';
