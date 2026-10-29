@@ -2,6 +2,7 @@ import {spawn} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {SONG_METADATA} from '../lib/timeline';
+import {SoftwareCanvas3D, renderProcedural3DFrame} from '../lib/software-3d-renderer';
 
 /**
  * Runs a single FFmpeg process with strict low-VRAM / single-frame-buffer constraints:
@@ -28,13 +29,133 @@ function runFfmpegLowVram(args: string[], label: string): Promise<void> {
 }
 
 /**
- * Encodes each 60-frame (60.0 FPS) real 3D Three.js WebGL animation sequence
- * (`public/renders/sequences/<id>/frame_000.jpg` .. `frame_059.jpg`)
- * into a 1.0-second (60-frame) 3840x2160 @ 60.0 FPS H.264 moving block,
- * buffering strictly 1 frame at a time (rc-lookahead=0, sync-lookahead=0, ref=1, bframes=0).
+ * Streams `frameCount` (60) moving 60.0 FPS 3D frames strictly 1 frame at a time
+ * from our pure-TypeScript 3D Stage & Character Rasterizer directly into FFmpeg stdin,
+ * scaling each frame to 3840x2160 (4K UHD) @ 60.0 FPS with zero external files needed.
  */
+function streamProcedural3DActTo4K60(
+  canvas3d: SoftwareCanvas3D,
+  baseFrame: number,
+  frameCount: number,
+  includeCredits: boolean,
+  outMp4: string,
+  label: string
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const args = [
+      '-y',
+      '-threads',
+      '1',
+      '-filter_threads',
+      '1',
+      '-f',
+      'rawvideo',
+      '-pix_fmt',
+      'rgb24',
+      '-s',
+      `${canvas3d.width}x${canvas3d.height}`,
+      '-r',
+      '60',
+      '-i',
+      'pipe:0',
+      '-vf',
+      'scale=3840:2160:flags=neighbor,fps=60',
+      '-frames:v',
+      String(frameCount),
+      '-r',
+      '60',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'veryfast',
+      '-crf',
+      '26',
+      '-maxrate',
+      '12M',
+      '-bufsize',
+      '12M',
+      '-pix_fmt',
+      'yuv420p',
+      '-x264-params',
+      'rc-lookahead=0:sync-lookahead=0:ref=1:bframes=0:keyint=60:min-keyint=60:scenecut=0:sliced-threads=0',
+      outMp4,
+    ];
+
+    const proc = spawn('ffmpeg', args, {stdio: ['pipe', 'ignore', 'pipe']});
+    let stderrTail = '';
+    proc.stderr.on('data', (chunk: Buffer) => {
+      stderrTail = (stderrTail + chunk.toString()).slice(-1200);
+    });
+    proc.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`[${label}] FFmpeg exited with code ${code}: ${stderrTail}`));
+    });
+
+    (async () => {
+      try {
+        for (let f = 0; f < frameCount; f++) {
+          const rgbBuf = renderProcedural3DFrame(canvas3d, baseFrame + f, includeCredits);
+          const canContinue = proc.stdin.write(rgbBuf);
+          if (!canContinue) {
+            await new Promise<void>((r) => proc.stdin.once('drain', () => r()));
+          }
+        }
+        proc.stdin.end();
+      } catch (err) {
+        proc.kill();
+        reject(err);
+      }
+    })();
+  });
+}
+
+/**
+ * Exports a single 3840x2160 (4K UHD) PNG thumbnail from a 1-frame procedural 3D render.
+ */
+function exportProcedural4KThumbnail(
+  canvas3d: SoftwareCanvas3D,
+  frameIndex: number,
+  outputThumb: string
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const args = [
+      '-y',
+      '-threads',
+      '1',
+      '-filter_threads',
+      '1',
+      '-f',
+      'rawvideo',
+      '-pix_fmt',
+      'rgb24',
+      '-s',
+      `${canvas3d.width}x${canvas3d.height}`,
+      '-i',
+      'pipe:0',
+      '-vf',
+      'scale=3840:2160:flags=neighbor',
+      '-frames:v',
+      '1',
+      outputThumb,
+    ];
+    const proc = spawn('ffmpeg', args, {stdio: ['pipe', 'ignore', 'pipe']});
+    let stderrTail = '';
+    proc.stderr.on('data', (chunk: Buffer) => {
+      stderrTail = (stderrTail + chunk.toString()).slice(-1200);
+    });
+    proc.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`[Export 4K Thumbnail] FFmpeg exited with code ${code}: ${stderrTail}`));
+    });
+    const rgbBuf = renderProcedural3DFrame(canvas3d, frameIndex, false);
+    proc.stdin.write(rgbBuf);
+    proc.stdin.end();
+  });
+}
+
 async function main() {
   const args = process.argv.slice(2);
+  const forceStandalone = args.includes('--standalone');
   const durArgIdx = args.indexOf('--duration');
   const durationSec =
     durArgIdx >= 0 && args[durArgIdx + 1]
@@ -44,8 +165,8 @@ async function main() {
   const rootDir = process.cwd();
   const rendersDir = path.join(rootDir, 'public', 'renders');
   const sequencesDir = path.join(rendersDir, 'sequences');
-  const platesDir = path.join(rendersDir, 'plates');
   const chunksDir = path.join(rendersDir, 'chunks_low_vram');
+  fs.mkdirSync(rendersDir, {recursive: true});
   fs.mkdirSync(chunksDir, {recursive: true});
 
   const audioPath = path.join(
@@ -75,41 +196,49 @@ async function main() {
   console.log('  Audio Track    : Find_Its_Groove_4279e765.mp3 (AAC 256kbps Stereo)');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-  // 6 distinct 60-frame (60.0 FPS) real 3D Three.js animation acts
+  // 6 distinct 60-frame (60.0 FPS) 3D animation acts
   const actDefs = [
     {
       id: 'act1_intro_verse1',
+      baseFrame: 360,
+      credits: false,
       label: 'Act 1 · Intro & Verse 1 (Spark & Beat Duet + Wishing Stars)',
-      fallbackPlate: path.join(platesDir, 'plate_intro_verse1.png'),
     },
     {
       id: 'act2_prechorus_build',
+      baseFrame: 1140,
+      credits: false,
       label: 'Act 2 · Pre-Chorus Build (Metronome & Glowing Path)',
-      fallbackPlate: path.join(platesDir, 'plate_intro_verse1.png'),
     },
     {
       id: 'act3_chorus_city',
+      baseFrame: 1620,
+      credits: false,
       label: 'Act 3 · Chorus Vinyl City Boulevard (3-Tier Tiles + Melody Orb)',
-      fallbackPlate: path.join(platesDir, 'plate_chorus_city.png'),
     },
     {
       id: 'act4_dance_break',
+      baseFrame: 2760,
+      credits: false,
       label: 'Act 4 · Dance Break Hero Choreography (60FPS Note Dancers)',
-      fallbackPlate: path.join(platesDir, 'plate_chorus_city.png'),
     },
     {
       id: 'act5_verse2_bridge',
+      baseFrame: 3660,
+      credits: false,
       label: 'Act 5 · Verse 2 & Bridge (Suno 3D DAW Workstation & Stacked Tower)',
-      fallbackPlate: path.join(platesDir, 'plate_verse2_workshop.png'),
     },
     {
       id: 'act6_outro_credits',
+      baseFrame: 9600,
+      credits: true,
       label: 'Act 6 · Outro + Official End Credits Slate (Noon Sun & 60FPS Stage)',
-      fallbackPlate: path.join(platesDir, 'plate_outro_credits.png'),
     },
   ] as const;
 
   const blockMap: Record<string, string> = {};
+  // Single reusable 1280x720 RGB24 frame buffer (2.76 MB) for standalone 1-frame-at-a-time 3D rendering
+  const standaloneCanvas3D = new SoftwareCanvas3D(1280, 720);
 
   for (const act of actDefs) {
     const seqFolder = path.join(sequencesDir, act.id);
@@ -117,9 +246,7 @@ async function main() {
     const outMp4 = path.join(chunksDir, `moving_${act.id}_4k60.mp4`);
     blockMap[act.id] = outMp4;
 
-    if (fs.existsSync(firstSeqFrame)) {
-      // Encode 60 distinct, consecutive 60 FPS 3D rendered frames (frame_000.jpg .. frame_059.jpg)
-      // strictly 1 frame at a time into 3840x2160 @ 60.0 FPS!
+    if (!forceStandalone && fs.existsSync(firstSeqFrame)) {
       await runFfmpegLowVram(
         [
           '-y',
@@ -159,15 +286,24 @@ async function main() {
         `  ✓ [1-Frame Buffer] Encoded 60 moving 4K 60FPS frames (3840×2160) for ${act.label}`
       );
     } else {
-      throw new Error(
-        `Missing 60fps 3D sequence frames in ${seqFolder}. Capture 3D sequences first.`
+      // Standalone 1-frame-at-a-time 3D software rasterizer -> FFmpeg rawvideo pipe (works anywhere!)
+      await streamProcedural3DActTo4K60(
+        standaloneCanvas3D,
+        act.baseFrame,
+        60,
+        act.credits,
+        outMp4,
+        `Standalone 60FPS 3D Stream (${act.id})`
+      );
+      console.log(
+        `  ✓ [1-Frame 3D Stream] Rendered & encoded 60 moving 4K 60FPS frames (3840×2160) for ${act.label}`
       );
     }
   }
 
-  // Export 3840x2160 4K UHD Thumbnail from Chorus frame_015.jpg
+  // Export 3840x2160 4K UHD Thumbnail
   const chorusThumbSrc = path.join(sequencesDir, 'act3_chorus_city', 'frame_015.jpg');
-  if (fs.existsSync(chorusThumbSrc)) {
+  if (!forceStandalone && fs.existsSync(chorusThumbSrc)) {
     await runFfmpegLowVram(
       [
         '-y',
@@ -185,8 +321,10 @@ async function main() {
       ],
       'Export 4K UHD Thumbnail'
     );
-    console.log(`  ✓ Exported 4K UHD Thumbnail (3840×2160) -> ${outputThumb}`);
+  } else {
+    await exportProcedural4KThumbnail(standaloneCanvas3D, 1635, outputThumb);
   }
+  console.log(`  ✓ Exported 4K UHD Thumbnail (3840×2160) -> ${outputThumb}`);
 
   // Step 3: Assemble all 10,290 moving 4K 60FPS frames (171.5s @ 60.0 FPS) across all 12 song chapters
   // via ZERO-RE-ENCODE stream copy (-c:v copy) and attach the full MP3 audio track!
